@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::f32::consts::{FRAC_PI_2, PI};
 
 use bevy::{
     prelude::*,
@@ -17,7 +17,7 @@ fn main() {
 
 #[derive(Default)]
 struct Windows {
-    pub windows: Vec<(Entity, Handle<Image>)>,
+    pub windows: Vec<(Entity, Handle<Image>, Handle<StandardMaterial>)>,
 }
 
 /// set up a simple 3D scene
@@ -76,6 +76,9 @@ fn capture(
 
     let texture: Vec<u8> = ps
         .as_slice()
+        // .chunks(geom.width as usize)
+        // .rev()
+        // .flatten()
         .iter()
         .map(|v| [v.b, v.g, v.r, 255])
         .flatten()
@@ -84,49 +87,45 @@ fn capture(
     let image = Image::new(
         size,
         TextureDimension::D2,
-        texture,
+        texture.clone(),
         TextureFormat::Bgra8Unorm,
     );
-    info!("{:?}", size);
 
     if windows.windows.is_empty() {
         info!("empty");
         let texture_handle = textures.add(image);
-
-        if false {
-            let entity = commands
-                .spawn_bundle(PbrBundle {
-                    mesh: meshes.add(Mesh::from(shape::Plane { size: 5.0 })),
-                    material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-                    ..Default::default()
-                })
-                .id();
-        } else {
-            let rotation = Quat::from_axis_angle(Vec3::X, PI / 2.);
-            // this material renders the texture normally
-            let material_handle = materials.add(StandardMaterial {
-                base_color_texture: Some(texture_handle.clone()),
-                alpha_mode: AlphaMode::Blend,
-                unlit: true,
+        let width = 5.0;
+        let height = width * (geom.height as f32 / geom.width as f32);
+        let rotation = Quat::IDENTITY;
+        let x_rot = Quat::from_axis_angle(Vec3::X, PI);
+        let material_handle = materials.add(StandardMaterial {
+            base_color_texture: Some(texture_handle.clone()),
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
+            double_sided: true,
+            ..Default::default()
+        });
+        let entity = commands
+            .spawn_bundle(PbrBundle {
+                mesh: meshes.add(Mesh::from(shape::Quad {
+                    size: Vec2::new(width, height),
+                    flip: false,
+                })),
+                material: material_handle.clone(),
+                transform: Transform::from_rotation(rotation),
                 ..Default::default()
-            });
-            let entity = commands
-                .spawn_bundle(PbrBundle {
-                    mesh: meshes.add(Mesh::from(shape::Plane { size: 5.0 })),
-                    material: material_handle,
-                    // transform: Transform::from_rotation(rotation),
-                    ..Default::default()
-                })
-                .id();
-            windows.windows.push((entity, texture_handle));
-        };
+            })
+            .id();
+        windows
+            .windows
+            .push((entity, texture_handle, material_handle));
     } else {
         // info!("getting new texture");
-        let (entity, texture_handle) = windows.windows.first().unwrap();
-        if let Some(texture) = textures.get_mut(texture_handle) {
-            // info!("setong new texture");
-            *texture = image;
-        }
+        let texture_handle = textures.add(image);
+
+        let (entity, _, material_handle) = windows.windows.first().unwrap();
+        let mut material = materials.get_mut(material_handle).unwrap();
+        material.base_color_texture = Some(texture_handle);
     }
 
     // commands.entity(entity).commands.tex
